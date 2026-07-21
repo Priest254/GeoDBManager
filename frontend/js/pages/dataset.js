@@ -6,6 +6,7 @@ import {
   showBulkAddFieldsModal,
   showBulkRenameFieldModal,
   showBulkDeleteFieldModal,
+  showCalculateFieldModal,
   showRenameDatasetModal,
   showExportModal,
 } from '../components/modals.js';
@@ -72,6 +73,7 @@ export function renderDatasetPage(datasetName) {
     <button class="btn btn-ghost" id="ds-bulk-add" style="font-size:11px">⚡ Bulk Add Fields</button>
     <button class="btn btn-ghost" id="ds-bulk-rename" style="font-size:11px">✏️ Bulk Rename Field</button>
     <button class="btn btn-ghost" id="ds-bulk-delete" style="font-size:11px">🗑 Bulk Delete Field</button>
+    <button class="btn btn-ghost" id="ds-bulk-calculate" style="font-size:11px">🧮 Bulk Calculate Field</button>
   `;
 
   attachBreadcrumbListeners(document.getElementById('toolbar'));
@@ -158,6 +160,9 @@ export function renderDatasetPage(datasetName) {
   });
   document.getElementById('ds-bulk-delete').addEventListener('click', () => {
     showBulkDeleteFieldModal(gdbPath, gdbInfo, datasetName);
+  });
+  document.getElementById('ds-bulk-calculate').addEventListener('click', () => {
+    showCalculateFieldModal(null, null, gdbPath, true, gdbInfo, datasetName);
   });
 
   document.getElementById('btn-export-ds')?.addEventListener('click', () => {

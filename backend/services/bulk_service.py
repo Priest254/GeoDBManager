@@ -53,11 +53,15 @@ def bulk_add_fields(gdb_path: str, req: BulkAddFieldsRequest) -> BulkOperationRe
 
     for fc_name in targets:
         try:
-            field_service.add_fields_bulk(req.fields, gdb_path, fc_name)
+            added, skipped = field_service.add_fields_bulk(req.fields, gdb_path, fc_name)
+            msg = f"Added {len(added)} field(s) to '{fc_name}'"
+            if skipped:
+                msg += f" (Skipped {len(skipped)} existing)"
+            
             results.append(
                 OperationResult(
                     success=True,
-                    message=f"Added {len(req.fields)} field(s) to '{fc_name}'",
+                    message=msg,
                     affected=[f.name for f in req.fields],
                 )
             )

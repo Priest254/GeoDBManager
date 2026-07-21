@@ -1,6 +1,6 @@
 """Field-level endpoints: add, rename, delete a field on one feature class."""
 from fastapi import APIRouter, HTTPException, Query
-from backend.models.schemas import AddFieldRequest, RenameFieldRequest
+from backend.models.schemas import AddFieldRequest, RenameFieldRequest, CalculateFieldRequest
 from backend.services import field_service
 
 router = APIRouter(prefix="/api/fields", tags=["fields"])
@@ -13,8 +13,11 @@ def add_field(
     gdb_path: str = Query(...),
 ):
     try:
-        field_service.add_field(gdb_path, layer_name, req)
-        return {"success": True, "message": f"Field '{req.name}' added to '{layer_name}'"}
+        added = field_service.add_field(gdb_path, layer_name, req)
+        if added:
+            return {"success": True, "message": f"Field '{req.name}' added to '{layer_name}'"}
+        else:
+            return {"success": True, "message": f"Field '{req.name}' already exists in '{layer_name}'"}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -46,6 +49,22 @@ def delete_field(
     try:
         field_service.delete_field(gdb_path, layer_name, field_name)
         return {"success": True, "message": f"Deleted field '{field_name}' from '{layer_name}'"}
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{layer_name}/{field_name}/calculate")
+def calculate_field(
+    layer_name: str,
+    field_name: str,
+    req: CalculateFieldRequest,
+    gdb_path: str = Query(...),
+):
+    try:
+        count = field_service.calculate_field(gdb_path, layer_name, field_name, req.calc_type, req.constant_value)
+        return {"success": True, "message": f"Calculated values for {count} features", "affected": [layer_name]}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

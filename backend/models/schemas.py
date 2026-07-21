@@ -67,6 +67,11 @@ class BulkDeleteFieldRequest(BaseModel):
     field_name: str
 
 
+class CalculateFieldRequest(BaseModel):
+    calc_type: str
+    constant_value: Optional[Any] = None
+
+
 # ── Response Models ──────────────────────────────────────────────────────────
 
 class FieldInfo(BaseModel):

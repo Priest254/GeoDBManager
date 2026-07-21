@@ -461,13 +461,49 @@ export function showBulkAddFieldsModal(gdbPath, gdbInfo, preselectedDataset) {
     const dataset = backdrop.querySelector('#bulk-dataset').value || null;
     const feature_filter = backdrop.querySelector('#bulk-filter').value.trim() || null;
 
+    const allFeatures = [];
+    if (dataset) {
+      const ds = gdbInfo.datasets.find(d => d.name === dataset);
+      if (ds) allFeatures.push(...ds.features);
+    } else {
+      allFeatures.push(...gdbInfo.standalone_features);
+      gdbInfo.datasets.forEach(d => allFeatures.push(...d.features));
+    }
+    const targets = feature_filter ? allFeatures.filter(f => f.toLowerCase().includes(feature_filter.toLowerCase())) : allFeatures;
+
+    if (targets.length === 0) {
+      showError('No feature classes match the selected filter.', 'Bulk Add Fields');
+      return;
+    }
+
     const btn = backdrop.querySelector('#run-bulk-add');
-    btn.disabled = true; btn.textContent = 'Applying…';
+    btn.disabled = true;
+
+    const results = {
+      total: targets.length,
+      succeeded: 0,
+      failed: 0,
+      results: []
+    };
 
     try {
-      const result = await API.bulkAddFields(gdbPath, { dataset, feature_filter, fields });
+      for (let i = 0; i < targets.length; i++) {
+        btn.textContent = `Applying ${i + 1} / ${targets.length}…`;
+        const fc = targets[i];
+        try {
+          const res = await API.bulkAddFields(gdbPath, { features: [fc], fields });
+          if (res.results && res.results.length > 0) {
+            const opRes = res.results[0];
+            if (opRes.success) results.succeeded++; else results.failed++;
+            results.results.push(opRes);
+          }
+        } catch (err) {
+          results.failed++;
+          results.results.push({ success: false, message: err.message || String(err), affected: [fc] });
+        }
+      }
       closeModal(backdrop);
-      showBulkResultsModal(result, 'Bulk Add Fields — Results');
+      showBulkResultsModal(results, 'Bulk Add Fields — Results');
     } catch (e) {
       showError(e.message, 'Bulk Operation Failed');
       btn.disabled = false; btn.textContent = '⚡ Apply Bulk Add';
@@ -547,13 +583,44 @@ export function showBulkRenameFieldModal(gdbPath, gdbInfo, preselectedDataset) {
     const dataset = backdrop.querySelector('#brn-dataset').value || null;
     const feature_filter = backdrop.querySelector('#brn-filter').value.trim() || null;
 
+    const allFeatures = [];
+    if (dataset) {
+      const ds = gdbInfo.datasets.find(d => d.name === dataset);
+      if (ds) allFeatures.push(...ds.features);
+    } else {
+      allFeatures.push(...gdbInfo.standalone_features);
+      gdbInfo.datasets.forEach(d => allFeatures.push(...d.features));
+    }
+    const targets = feature_filter ? allFeatures.filter(f => f.toLowerCase().includes(feature_filter.toLowerCase())) : allFeatures;
+
+    if (targets.length === 0) {
+      showError('No feature classes match the selected filter.', 'Bulk Rename Field');
+      return;
+    }
+
     const btn = backdrop.querySelector('#run-bulk-rename');
-    btn.disabled = true; btn.textContent = 'Applying…';
+    btn.disabled = true;
+
+    const results = { total: targets.length, succeeded: 0, failed: 0, results: [] };
 
     try {
-      const result = await API.bulkRenameField(gdbPath, { dataset, feature_filter, old_name, new_name });
+      for (let i = 0; i < targets.length; i++) {
+        btn.textContent = `Applying ${i + 1} / ${targets.length}…`;
+        const fc = targets[i];
+        try {
+          const res = await API.bulkRenameField(gdbPath, { features: [fc], old_name, new_name });
+          if (res.results && res.results.length > 0) {
+            const opRes = res.results[0];
+            if (opRes.success) results.succeeded++; else results.failed++;
+            results.results.push(opRes);
+          }
+        } catch (err) {
+          results.failed++;
+          results.results.push({ success: false, message: err.message || String(err), affected: [fc] });
+        }
+      }
       closeModal(backdrop);
-      showBulkResultsModal(result, 'Bulk Rename Field — Results');
+      showBulkResultsModal(results, 'Bulk Rename Field — Results');
     } catch (e) {
       showError(e.message, 'Bulk Rename Failed');
       btn.disabled = false; btn.textContent = '✏️ Apply Bulk Rename';
@@ -605,13 +672,44 @@ export function showBulkDeleteFieldModal(gdbPath, gdbInfo, preselectedDataset) {
     const dataset = backdrop.querySelector('#bdf-dataset').value || null;
     const feature_filter = backdrop.querySelector('#bdf-filter').value.trim() || null;
 
+    const allFeatures = [];
+    if (dataset) {
+      const ds = gdbInfo.datasets.find(d => d.name === dataset);
+      if (ds) allFeatures.push(...ds.features);
+    } else {
+      allFeatures.push(...gdbInfo.standalone_features);
+      gdbInfo.datasets.forEach(d => allFeatures.push(...d.features));
+    }
+    const targets = feature_filter ? allFeatures.filter(f => f.toLowerCase().includes(feature_filter.toLowerCase())) : allFeatures;
+
+    if (targets.length === 0) {
+      showError('No feature classes match the selected filter.', 'Bulk Delete Field');
+      return;
+    }
+
     const btn = backdrop.querySelector('#run-bulk-delete');
-    btn.disabled = true; btn.textContent = 'Deleting…';
+    btn.disabled = true;
+
+    const results = { total: targets.length, succeeded: 0, failed: 0, results: [] };
 
     try {
-      const result = await API.bulkDeleteField(gdbPath, { dataset, feature_filter, field_name });
+      for (let i = 0; i < targets.length; i++) {
+        btn.textContent = `Deleting ${i + 1} / ${targets.length}…`;
+        const fc = targets[i];
+        try {
+          const res = await API.bulkDeleteField(gdbPath, { features: [fc], field_name });
+          if (res.results && res.results.length > 0) {
+            const opRes = res.results[0];
+            if (opRes.success) results.succeeded++; else results.failed++;
+            results.results.push(opRes);
+          }
+        } catch (err) {
+          results.failed++;
+          results.results.push({ success: false, message: err.message || String(err), affected: [fc] });
+        }
+      }
       closeModal(backdrop);
-      showBulkResultsModal(result, 'Bulk Delete Field — Results');
+      showBulkResultsModal(results, 'Bulk Delete Field — Results');
     } catch (e) {
       showError(e.message, 'Bulk Delete Failed');
       btn.disabled = false; btn.textContent = '🗑 Apply Bulk Delete';
@@ -665,6 +763,9 @@ function showBulkResultsModal(result, title) {
   } else {
     showSuccess(`${result.succeeded} succeeded, ${result.failed} failed`);
   }
+  
+  // Refresh the underlying UI so the user can see the newly added/modified fields
+  refreshCurrentFeature();
 }
 
 // ── Export Modal ──────────────────────────────────────────────────
@@ -742,6 +843,169 @@ export function showExportModal(gdbPath, availableLayers = [], defaultSelectedLa
       showError(e.message, 'Export Failed');
       btn.disabled = false;
       btn.textContent = '📥 Export Selected';
+    }
+  });
+}
+
+// ── Calculate Field ───────────────────────────────────────────────
+
+export function showCalculateFieldModal(layerName, fieldName, gdbPath, isBulk = false, gdbInfo = null, preselectedDataset = null) {
+  const calcOptions = [
+    { value: 'constant', label: 'Constant Value' },
+    { value: 'area_sqm', label: 'Area (Square Meters)' },
+    { value: 'area_ha', label: 'Area (Hectares)' },
+    { value: 'area_acres', label: 'Area (Acres)' },
+    { value: 'area_sqkm', label: 'Area (Square Kilometers)' },
+    { value: 'length_m', label: 'Perimeter/Length (Meters)' },
+    { value: 'length_km', label: 'Perimeter/Length (Kilometers)' },
+    { value: 'length_ft', label: 'Perimeter/Length (Feet)' },
+    { value: 'centroid_x', label: 'Centroid X (Map Units)' },
+    { value: 'centroid_y', label: 'Centroid Y (Map Units)' }
+  ].map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+
+  let targetControls = '';
+  if (isBulk) {
+    const datasetOptions = ['(All features)', ...gdbInfo.datasets.map(d => d.name)]
+      .map(d => `<option value="${d === '(All features)' ? '' : d}" ${d !== '(All features)' && d === preselectedDataset ? 'selected' : ''}>${d}</option>`)
+      .join('');
+      
+    targetControls = `
+      <div class="form-group">
+        <label class="form-label" for="calc-dataset">Target Dataset</label>
+        <select class="form-control" id="calc-dataset">${datasetOptions}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="calc-filter">Feature Name Filter (optional)</label>
+        <input class="form-control" id="calc-filter" type="text" placeholder="substring match">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="calc-field">Field Name *</label>
+        <input class="form-control mono" id="calc-field" type="text" placeholder="field_name" value="${fieldName || ''}">
+      </div>
+      <div class="section-sep"></div>
+    `;
+  } else {
+    targetControls = `
+      <div class="form-group">
+        <label class="form-label">Target</label>
+        <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:4px;font-family:monospace">
+          ${layerName} > ${fieldName}
+        </div>
+      </div>
+    `;
+  }
+
+  const backdrop = openModal(`
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">🧮 ${isBulk ? 'Bulk Calculate Field' : 'Calculate Field'}</div>
+        <button class="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info">
+          Geometry calculations use the map units of the layer's coordinate system. Geographic CRS will result in square degrees.
+        </div>
+        ${targetControls}
+        <div class="form-group">
+          <label class="form-label" for="calc-type">Calculation Type</label>
+          <select class="form-control" id="calc-type">
+            ${calcOptions}
+          </select>
+        </div>
+        <div class="form-group" id="calc-const-group">
+          <label class="form-label" for="calc-const">Constant Value</label>
+          <input class="form-control mono" id="calc-const" type="text" placeholder="e.g. 100 or 'Pending'">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-close">Cancel</button>
+        <button class="btn btn-primary" id="run-calc">🧮 ${isBulk ? 'Apply Bulk Calculate' : 'Calculate'}</button>
+      </div>
+    </div>
+  `);
+
+  const typeSel = backdrop.querySelector('#calc-type');
+  const constGroup = backdrop.querySelector('#calc-const-group');
+  
+  typeSel.addEventListener('change', () => {
+    if (typeSel.value === 'constant') {
+      constGroup.style.display = 'block';
+    } else {
+      constGroup.style.display = 'none';
+    }
+  });
+
+  backdrop.querySelector('#run-calc').addEventListener('click', async () => {
+    const calcType = typeSel.value;
+    let constVal = backdrop.querySelector('#calc-const').value.trim();
+    if (calcType === 'constant') {
+      if (!constVal) return;
+      if (!isNaN(Number(constVal))) constVal = Number(constVal);
+    } else {
+      constVal = null;
+    }
+
+    const btn = backdrop.querySelector('#run-calc');
+    btn.disabled = true;
+
+    if (!isBulk) {
+      btn.textContent = 'Calculating…';
+      try {
+        const res = await API.calculateField(layerName, fieldName, gdbPath, {
+          calc_type: calcType,
+          constant_value: constVal
+        });
+        showSuccess(res.message);
+        closeModal(backdrop);
+        if (window.refreshCurrentFeature) window.refreshCurrentFeature();
+      } catch (e) {
+        showError(e.message, 'Calculation Failed');
+        btn.disabled = false; btn.textContent = '🧮 Calculate';
+      }
+    } else {
+      const field_name = backdrop.querySelector('#calc-field').value.trim();
+      if (!field_name) {
+        btn.disabled = false;
+        return;
+      }
+      
+      const dataset = backdrop.querySelector('#calc-dataset').value || null;
+      const feature_filter = backdrop.querySelector('#calc-filter').value.trim() || null;
+
+      const allFeatures = [];
+      if (dataset) {
+        const ds = gdbInfo.datasets.find(d => d.name === dataset);
+        if (ds) allFeatures.push(...ds.features);
+      } else {
+        allFeatures.push(...gdbInfo.standalone_features);
+        gdbInfo.datasets.forEach(d => allFeatures.push(...d.features));
+      }
+      const targets = feature_filter ? allFeatures.filter(f => f.toLowerCase().includes(feature_filter.toLowerCase())) : allFeatures;
+
+      if (targets.length === 0) {
+        showError('No feature classes match the selected filter.', 'Bulk Calculate Field');
+        btn.disabled = false;
+        return;
+      }
+
+      const results = { total: targets.length, succeeded: 0, failed: 0, results: [] };
+      for (let i = 0; i < targets.length; i++) {
+        btn.textContent = `Calculating ${i + 1} / ${targets.length}…`;
+        const fc = targets[i];
+        try {
+          const res = await API.calculateField(fc, field_name, gdbPath, {
+            calc_type: calcType,
+            constant_value: constVal
+          });
+          results.succeeded++;
+          results.results.push({ success: true, message: res.message, affected: [fc] });
+        } catch (err) {
+          results.failed++;
+          results.results.push({ success: false, message: err.message || String(err), affected: [fc] });
+        }
+      }
+      closeModal(backdrop);
+      showBulkResultsModal(results, 'Bulk Calculate Field — Results');
     }
   });
 }

@@ -63,6 +63,9 @@ export const API = {
   deleteField: (layerName, fieldName, gdbPath) =>
     _req('DELETE', `/api/fields/${encodeURIComponent(layerName)}/${encodeURIComponent(fieldName)}`,
       null, { gdb_path: gdbPath }),
+  calculateField: (layerName, fieldName, gdbPath, payload) =>
+    _req('POST', `/api/fields/${encodeURIComponent(layerName)}/${encodeURIComponent(fieldName)}/calculate`,
+      payload, { gdb_path: gdbPath }),
 
   // Bulk
   bulkAddFields: (gdbPath, payload) =>

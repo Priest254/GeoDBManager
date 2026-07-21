@@ -2,7 +2,7 @@
  * feature.js — Feature class schema view with field management
  */
 import { API } from '../api.js';
-import { State, navigate } from '../app.js';
+import { State, navigate, formatFieldType } from '../app.js';
 import { showError, showSuccess } from '../components/toast.js';
 import {
   showAddFieldModal,
@@ -12,6 +12,7 @@ import {
   showBulkAddFieldsModal,
   showBulkRenameFieldModal,
   showBulkDeleteFieldModal,
+  showCalculateFieldModal,
   showExportModal,
 } from '../components/modals.js';
 
@@ -131,6 +132,7 @@ function renderFeatureContent(info) {
     <button class="btn btn-ghost" id="btn-bulk-add" title="Bulk add fields to dataset" style="font-size:11px">⚡ Bulk Add</button>
     <button class="btn btn-ghost" id="btn-bulk-rename" title="Bulk rename field" style="font-size:11px">✏️ Bulk Rename</button>
     <button class="btn btn-ghost" id="btn-bulk-delete" title="Bulk delete field" style="font-size:11px">🗑 Bulk Delete</button>
+    <button class="btn btn-ghost" id="btn-bulk-calculate" title="Bulk calculate field" style="font-size:11px">🧮 Bulk Calculate</button>
   `;
 
   attachBreadcrumbListeners(document.getElementById('toolbar'));
@@ -238,6 +240,10 @@ function renderFeatureContent(info) {
   document.getElementById('btn-bulk-delete')?.addEventListener('click', () => {
     showBulkDeleteFieldModal(gdbPath, State.gdbInfo, dataset);
   });
+
+  document.getElementById('btn-bulk-calculate')?.addEventListener('click', () => {
+    showCalculateFieldModal(_currentFeature.name, null, gdbPath, true, State.gdbInfo, dataset);
+  });
 }
 
 function renderTabContent(info) {
@@ -278,7 +284,7 @@ function renderFieldsTable(info) {
             <tr data-field="${f.name}" data-system="${f.is_system}">
               <td style="color:var(--text-muted)">${i + 1}</td>
               <td class="field-name-cell">${f.name}</td>
-              <td><span class="tag tag-type">${f.field_type}</span></td>
+              <td><span class="tag tag-type">${formatFieldType(f.field_type)}</span></td>
               <td>${f.width ?? '—'}</td>
               <td>${f.nullable ? '<span class="tag tag-nullable">Yes</span>' : '<span class="tag tag-not-null">No</span>'}</td>
               <td style="color:var(--text-muted)">${'—'}</td>
@@ -286,6 +292,7 @@ function renderFieldsTable(info) {
               <td>
                 <div class="row-actions" style="justify-content:flex-end">
                   ${!f.is_system ? `
+                    <button class="icon-btn calculate-field-btn" data-field="${f.name}" title="Calculate field">🧮</button>
                     <button class="icon-btn rename-field-btn" data-field="${f.name}" title="Rename field">✏️</button>
                     <button class="icon-btn danger delete-field-btn" data-field="${f.name}" title="Delete field">🗑</button>
                   ` : '<span style="color:var(--text-muted);font-size:11px;padding-right:8px">locked</span>'}
@@ -304,6 +311,12 @@ function renderFieldsTable(info) {
   document.querySelectorAll('.rename-field-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       showRenameFieldModal(name, btn.dataset.field, gdbPath, () => renderFeaturePage(name, dataset));
+    });
+  });
+
+  document.querySelectorAll('.calculate-field-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      showCalculateFieldModal(name, btn.dataset.field, gdbPath, false);
     });
   });
 

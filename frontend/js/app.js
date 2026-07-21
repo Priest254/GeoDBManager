@@ -109,3 +109,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+export function formatFieldType(type) {
+  const map = {
+    'String': 'Text (String)',
+    'Integer': 'Short (Integer)',
+    'Integer64': 'Long (Integer64)',
+    'Real': 'Double (Real)',
+    'Date': 'Date',
+    'DateTime': 'Date/Time',
+    'Binary': 'Blob (Binary)'
+  };
+  return map[type] || type;
+}
