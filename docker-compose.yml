@@ -1,0 +1,16 @@
+services:
+  geodb-manager:
+    build: .
+    container_name: geodb-manager
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount your GDB files here — place .gdb folders inside ./data/
+      - ./input_sample:/data:rw
+      # Hot-reload: mount source during development
+      - ./backend:/app/backend:ro
+      - ./frontend:/app/frontend:ro
+    environment:
+      - DATA_DIR=/data
+      - APP_ENV=development
+    restart: unless-stopped

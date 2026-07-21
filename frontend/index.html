@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="GeoDBManager — Professional Esri File Geodatabase management tool">
+  <title>GeoDBManager</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗄️</text></svg>">
+</head>
+<body>
+
+<div class="app-layout" id="app">
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <button class="header-toggle-btn" id="btn-toggle-sidebar" title="Toggle Sidebar">
+      ☰
+    </button>
+
+    <div class="app-logo">
+      <div class="logo-icon">🗄</div>
+      GeoDBManager
+    </div>
+
+    <div class="header-sep"></div>
+
+    <div class="header-gdb-badge" id="header-gdb-badge" style="display:none">
+      <div class="dot"></div>
+      <span class="gdb-name">—</span>
+    </div>
+
+    <button class="btn-header" id="btn-close-gdb" title="Close current GDB and return home">
+      ↩ Close GDB
+    </button>
+
+    <a href="/api/docs" target="_blank" class="btn-header" title="API Documentation">
+      📖 API Docs
+    </a>
+
+    <button class="header-toggle-btn" id="btn-toggle-inspector" title="Toggle Properties">
+      ⓘ
+    </button>
+  </header>
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <!-- Rendered by sidebar.js -->
+  </aside>
+
+  <!-- ── Main Content ───────────────────────────────────────────── -->
+  <main class="main-content">
+    <div class="toolbar" id="toolbar">
+      <!-- Rendered by page components -->
+    </div>
+    <div class="content-area" id="main-content-area">
+      <!-- Rendered by page components -->
+    </div>
+  </main>
+
+  <!-- ── Inspector ──────────────────────────────────────────────── -->
+  <aside class="inspector" id="inspector">
+    <div class="inspector-header">
+      <span class="inspector-title">Properties</span>
+    </div>
+    <div class="inspector-body" id="inspector-body">
+      <!-- Rendered by page components -->
+    </div>
+  </aside>
+
+</div>
+
+<!-- Toast container injected dynamically -->
+
+<script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
