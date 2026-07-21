@@ -1,1 +1,2 @@
-./input_sample/sample.gdb
+*.gdb
+*.gdb/
