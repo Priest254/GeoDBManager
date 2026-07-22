@@ -4,13 +4,9 @@ Handles all write operations on feature class fields using GDAL/OGR.
 Since File GDB fields cannot be renamed in-place by GDAL, we use a
 recreate-layer strategy: copy to temp, drop original, recreate with new schema.
 """
-import os
-import shutil
-import tempfile
-from pathlib import Path
 from typing import Any, List, Optional
 
-from osgeo import gdal, ogr
+from osgeo import gdal, ogr, osr
 
 from backend.models.schemas import AddFieldRequest, BulkFieldDefinition, FieldType
 from backend.services.gdb_service import open_gdb
@@ -206,6 +202,28 @@ def rename_dataset(gdb_path: str, old_name: str, new_name: str) -> None:
     ds = None
 
 
+
+def _calc_polygon_perimeter(geom) -> float:
+    """Fast calculation of polygon/multipolygon perimeter without Boundary() geometry allocation."""
+    gtype = geom.GetGeometryType()
+    if gtype in (ogr.wkbPolygon, ogr.wkbPolygon25D):
+        cnt = geom.GetGeometryCount()
+        if cnt == 1:
+            r = geom.GetGeometryRef(0)
+            return r.Length() if r else 0.0
+        return sum((geom.GetGeometryRef(i).Length() for i in range(cnt) if geom.GetGeometryRef(i)), 0.0)
+    elif gtype in (ogr.wkbMultiPolygon, ogr.wkbMultiPolygon25D):
+        tot = 0.0
+        mcnt = geom.GetGeometryCount()
+        for i in range(mcnt):
+            poly = geom.GetGeometryRef(i)
+            if poly:
+                pcnt = poly.GetGeometryCount()
+                tot += sum((poly.GetGeometryRef(j).Length() for j in range(pcnt) if poly.GetGeometryRef(j)), 0.0)
+        return tot
+    return geom.Length()
+
+
 def calculate_field(gdb_path: str, layer_name: str, field_name: str, calc_type: str, constant_value: Any = None) -> int:
     """Calculate field values based on geometry or a constant."""
     ds = open_gdb(gdb_path, update=True)
@@ -238,80 +256,117 @@ def calculate_field(gdb_path: str, layer_name: str, field_name: str, calc_type: 
             ds = None
             return count
         except Exception:
-            # Fallback to python loop if SQL fails for any reason
             pass
 
+    # 2. Optimized Geometry Calculations
+    AREA_FACTORS = {
+        "area_sqm": 1.0,
+        "area_ha": 0.0001,
+        "area_acres": 0.000247105,
+        "area_sqft": 10.76391041670972,
+        "area_sqkm": 0.000001,
+    }
+    LENGTH_FACTORS = {
+        "length_m": 1.0,
+        "length_km": 0.001,
+        "length_ft": 3.28084,
+        "length_mi": 0.000621371,
+    }
+
+    is_area = calc_type in AREA_FACTORS
+    area_factor = AREA_FACTORS.get(calc_type, 1.0)
+    
+    is_length = calc_type in LENGTH_FACTORS
+    length_factor = LENGTH_FACTORS.get(calc_type, 1.0)
+    
+    is_centroid_x = (calc_type == "centroid_x")
+    is_centroid_y = (calc_type == "centroid_y")
+    is_centroid = is_centroid_x or is_centroid_y
+
     count = 0
-    # Start transaction to dramatically speed up bulk writes
     has_txn = (layer.StartTransaction() == 0)
     batch_size = 50000
     
+    coord_trans = None
+    if is_centroid:
+        source_srs = layer.GetSpatialRef()
+        if source_srs:
+            try:
+                target_srs = osr.SpatialReference()
+                target_srs.ImportFromEPSG(4326)
+                source_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+                target_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+                if not source_srs.IsSame(target_srs):
+                    coord_trans = osr.CoordinateTransformation(source_srs, target_srs)
+            except Exception:
+                coord_trans = None
+
     try:
-        feat = layer.GetNextFeature()
-        
+        try:
+            feat = layer.GetNextFeature()
+        except Exception:
+            feat = None
+
         while feat:
-            val = None
-            
-            geom = feat.GetGeometryRef()
+            geom = None
+            try:
+                geom = feat.GetGeometryRef()
+            except Exception:
+                pass
+
             if not geom:
-                feat = layer.GetNextFeature()
+                try:
+                    feat = layer.GetNextFeature()
+                except Exception:
+                    feat = None
                 continue
                 
-            if calc_type.startswith("area"):
-                area = geom.GetArea()
-                if calc_type == "area_sqm": val = area
-                elif calc_type == "area_ha": val = area * 0.0001
-                elif calc_type == "area_acres": val = area * 0.000247105
-                elif calc_type == "area_sqkm": val = area * 0.000001
-                
-            elif calc_type.startswith("length"):
-                geom_type = geom.GetGeometryType()
-                if geom_type in (ogr.wkbPolygon, ogr.wkbMultiPolygon, ogr.wkbPolygon25D, ogr.wkbMultiPolygon25D):
-                    boundary = geom.Boundary()
-                    length = boundary.Length() if boundary else 0.0
-                    boundary = None
-                else:
-                    length = geom.Length()
-                    
-                if calc_type == "length_m": val = length
-                elif calc_type == "length_km": val = length * 0.001
-                elif calc_type == "length_ft": val = length * 3.28084
-                elif calc_type == "length_mi": val = length * 0.000621371
-                
-            elif calc_type == "centroid_x":
-                centroid = geom.Centroid()
-                if centroid: val = centroid.GetX()
-                centroid = None
-                
-            elif calc_type == "centroid_y":
-                centroid = geom.Centroid()
-                if centroid: val = centroid.GetY()
-                centroid = None
-                
-            geom = None # Dereference
+            val = None
+            try:
+                if is_area:
+                    val = geom.GetArea() * area_factor
+                elif is_length:
+                    val = _calc_polygon_perimeter(geom) * length_factor
+                elif is_centroid:
+                    cnt = geom.Centroid()
+                    if cnt:
+                        if coord_trans:
+                            cnt.Transform(coord_trans)
+                        val = cnt.GetX() if is_centroid_x else cnt.GetY()
+                        cnt = None
+            except Exception:
+                val = None
                 
             if val is not None:
-                current_val = feat.GetField(idx)
-                # 2. Skip disk write if value hasn't changed
-                if current_val != val:
+                try:
                     feat.SetField(idx, val)
                     layer.SetFeature(feat)
                     count += 1
                     
-                    if count > 0 and count % batch_size == 0:
+                    if count % batch_size == 0:
                         if has_txn:
                             layer.CommitTransaction()
                             layer.StartTransaction()
-                
-            feat = None 
-            feat = layer.GetNextFeature()
+                except Exception:
+                    pass
+            
+            try:
+                feat = layer.GetNextFeature()
+            except Exception:
+                feat = None
             
         if has_txn:
-            layer.CommitTransaction()
+            try:
+                layer.CommitTransaction()
+            except Exception:
+                pass
             
     except Exception as e:
         if has_txn:
-            layer.RollbackTransaction()
+            try:
+                layer.RollbackTransaction()
+            except Exception:
+                pass
         raise e
     finally:
         ds = None

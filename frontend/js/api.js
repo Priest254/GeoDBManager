@@ -67,13 +67,31 @@ export const API = {
     _req('POST', `/api/fields/${encodeURIComponent(layerName)}/${encodeURIComponent(fieldName)}/calculate`,
       payload, { gdb_path: gdbPath }),
 
-  // Bulk
+  // Bulk (Sync)
   bulkAddFields: (gdbPath, payload) =>
     _req('POST', '/api/bulk/add-fields', payload, { gdb_path: gdbPath }),
   bulkRenameField: (gdbPath, payload) =>
     _req('POST', '/api/bulk/rename-field', payload, { gdb_path: gdbPath }),
   bulkDeleteField: (gdbPath, payload) =>
     _req('POST', '/api/bulk/delete-field', payload, { gdb_path: gdbPath }),
+  bulkCalculateField: (gdbPath, payload) =>
+    _req('POST', '/api/bulk/calculate-field', payload, { gdb_path: gdbPath }),
+
+  // Bulk (Async Jobs)
+  bulkAddFieldsAsync: (gdbPath, payload) =>
+    _req('POST', '/api/bulk/add-fields-async', payload, { gdb_path: gdbPath }),
+  bulkRenameFieldAsync: (gdbPath, payload) =>
+    _req('POST', '/api/bulk/rename-field-async', payload, { gdb_path: gdbPath }),
+  bulkDeleteFieldAsync: (gdbPath, payload) =>
+    _req('POST', '/api/bulk/delete-field-async', payload, { gdb_path: gdbPath }),
+  bulkCalculateFieldAsync: (gdbPath, payload) =>
+    _req('POST', '/api/bulk/calculate-field-async', payload, { gdb_path: gdbPath }),
+
+  // Jobs
+  getJobStatus: (jobId) =>
+    _req('GET', `/api/jobs/${encodeURIComponent(jobId)}`),
+  cancelJob: (jobId) =>
+    _req('POST', `/api/jobs/${encodeURIComponent(jobId)}/cancel`),
 
   // Export
   exportFeatures: async (gdbPath, layers, format = 'shapefile') => {

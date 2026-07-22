@@ -3,11 +3,10 @@ gdb_service.py
 Core service for reading and inspecting Esri File Geodatabases using GDAL/OGR.
 All write operations (rename, add field, etc.) are handled in field_service.py.
 """
-import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
-from osgeo import gdal, ogr, osr
+from osgeo import gdal, ogr
 
 from backend.models.schemas import (
     DatasetInfo,
@@ -57,26 +56,44 @@ def _field_info(field_defn: ogr.FieldDefn) -> FieldInfo:
 
 def _layer_info(layer: ogr.Layer, dataset_name: Optional[str]) -> FeatureInfo:
     defn = layer.GetLayerDefn()
-    fields = [_field_info(defn.GetFieldDefn(i)) for i in range(defn.GetFieldCount())]
+    
+    fields = []
+    try:
+        if defn:
+            fields = [_field_info(defn.GetFieldDefn(i)) for i in range(defn.GetFieldCount())]
+    except Exception:
+        pass
 
     geom_type = None
-    gt = layer.GetGeomType()
-    if gt != ogr.wkbNone:
-        geom_type = ogr.GeometryTypeToName(gt)
+    try:
+        gt = layer.GetGeomType()
+        if gt != ogr.wkbNone:
+            geom_type = ogr.GeometryTypeToName(gt)
+    except Exception:
+        pass
 
     crs = None
-    srs = layer.GetSpatialRef()
-    if srs:
-        srs.AutoIdentifyEPSG()
-        code = srs.GetAuthorityCode(None)
-        name_str = srs.GetName() or ""
-        crs = f"EPSG:{code}" if code else name_str
+    try:
+        srs = layer.GetSpatialRef()
+        if srs:
+            srs.AutoIdentifyEPSG()
+            code = srs.GetAuthorityCode(None)
+            name_str = srs.GetName() or ""
+            crs = f"EPSG:{code}" if code else name_str
+    except Exception:
+        pass
+
+    feature_count = 0
+    try:
+        feature_count = layer.GetFeatureCount()
+    except Exception:
+        pass
 
     return FeatureInfo(
         name=layer.GetName(),
         dataset=dataset_name,
         geometry_type=geom_type,
-        feature_count=layer.GetFeatureCount(),
+        feature_count=feature_count,
         fields=fields,
         crs=crs,
     )
@@ -99,25 +116,29 @@ def get_gdb_info(gdb_path: str) -> GDBInfo:
     standalone: List[str] = []
 
     # Use the GDB_Items system table to parse dataset and feature paths
-    items_layer = ds.GetLayerByName("GDB_Items")
-    if items_layer:
-        items_layer.ResetReading()
-        feat = items_layer.GetNextFeature()
-        while feat:
-            name_val = feat.GetField("Name") if feat.GetFieldIndex("Name") >= 0 else None
-            path_val = feat.GetField("Path") if feat.GetFieldIndex("Path") >= 0 else None
-            
-            if name_val and path_val and name_val in user_layers:
-                # Path format is typically \DatasetName\FeatureClassName or \FeatureClassName
-                parts = [p for p in path_val.split("\\") if p]
-                if len(parts) >= 2:
-                    parent = parts[-2]
-                    if parent not in dataset_map:
-                        dataset_map[parent] = []
-                    dataset_map[parent].append(name_val)
-                else:
-                    standalone.append(name_val)
+    try:
+        items_layer = ds.GetLayerByName("GDB_Items")
+        if items_layer:
+            items_layer.ResetReading()
             feat = items_layer.GetNextFeature()
+            while feat:
+                name_val = feat.GetField("Name") if feat.GetFieldIndex("Name") >= 0 else None
+                path_val = feat.GetField("Path") if feat.GetFieldIndex("Path") >= 0 else None
+                
+                if name_val and path_val and name_val in user_layers:
+                    # Path format is typically \DatasetName\FeatureClassName or \FeatureClassName
+                    parts = [p for p in path_val.split("\\") if p]
+                    if len(parts) >= 2:
+                        parent = parts[-2]
+                        if parent not in dataset_map:
+                            dataset_map[parent] = []
+                        dataset_map[parent].append(name_val)
+                    else:
+                        standalone.append(name_val)
+                feat = items_layer.GetNextFeature()
+    except Exception:
+        # Fall back to treating all layers as standalone features
+        pass
 
     # Fallback: if system table is missing or returned nothing, treat all as standalone
     if not dataset_map and not standalone:
@@ -192,43 +213,69 @@ def get_feature_data(gdb_path: str, layer_name: str, limit: int = 100, offset: i
         raise KeyError(f"Layer '{layer_name}' not found")
 
     defn = layer.GetLayerDefn()
-    columns = [defn.GetFieldDefn(i).GetName() for i in range(defn.GetFieldCount())]
+    columns = []
+    field_count = 0
+    try:
+        if defn:
+            field_count = defn.GetFieldCount()
+            columns = [defn.GetFieldDefn(i).GetName() for i in range(field_count)]
+    except Exception:
+        pass
 
     # Include geometry summary column if present
-    geom_type = layer.GetGeomType()
+    geom_type = ogr.wkbNone
+    try:
+        geom_type = layer.GetGeomType()
+    except Exception:
+        pass
+        
     has_geom = (geom_type != ogr.wkbNone)
     if has_geom:
         columns.insert(0, "_geometry")
 
-    total_count = layer.GetFeatureCount()
+    total_count = 0
+    try:
+        total_count = layer.GetFeatureCount()
+    except Exception:
+        pass
+        
     rows = []
 
-    layer.ResetReading()
-    # Advance to offset
-    curr = 0
-    feat = layer.GetNextFeature()
-    while feat and curr < offset:
-        curr += 1
+    try:
+        if offset > 0:
+            layer.SetNextByIndex(offset)
         feat = layer.GetNextFeature()
+    except Exception:
+        feat = None
 
     count = 0
     while feat and count < limit:
         row = {}
         if has_geom:
-            geom = feat.GetGeometryRef()
-            row["_geometry"] = geom.GetGeometryName() if geom else "NULL"
+            try:
+                geom = feat.GetGeometryRef()
+                row["_geometry"] = geom.GetGeometryName() if geom else "NULL"
+            except Exception:
+                row["_geometry"] = "ERROR"
 
-        for i in range(defn.GetFieldCount()):
-            col_name = defn.GetFieldDefn(i).GetName()
-            val = feat.GetField(i)
-            # Serialize non-standard types
-            if isinstance(val, (bytes, bytearray)):
-                val = "<Binary Data>"
-            row[col_name] = val
+        for i in range(field_count):
+            try:
+                col_name = defn.GetFieldDefn(i).GetName()
+                val = feat.GetField(i)
+                # Serialize non-standard types
+                if isinstance(val, (bytes, bytearray)):
+                    val = "<Binary Data>"
+                row[col_name] = val
+            except Exception:
+                pass
 
         rows.append(row)
         count += 1
-        feat = layer.GetNextFeature()
+        try:
+            feat = layer.GetNextFeature()
+        except Exception:
+            feat = None
+
 
     ds = None
     return {

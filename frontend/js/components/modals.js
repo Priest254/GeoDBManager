@@ -4,6 +4,7 @@
 import { API } from '../api.js';
 import { State, refreshCurrentFeature } from '../app.js';
 import { showSuccess, showError } from './toast.js';
+import { showProgressModal } from './progress_modal.js';
 
 let _activeElementBeforeModal = null;
 
@@ -478,32 +479,15 @@ export function showBulkAddFieldsModal(gdbPath, gdbInfo, preselectedDataset) {
 
     const btn = backdrop.querySelector('#run-bulk-add');
     btn.disabled = true;
-
-    const results = {
-      total: targets.length,
-      succeeded: 0,
-      failed: 0,
-      results: []
-    };
+    btn.textContent = 'Submitting task…';
 
     try {
-      for (let i = 0; i < targets.length; i++) {
-        btn.textContent = `Applying ${i + 1} / ${targets.length}…`;
-        const fc = targets[i];
-        try {
-          const res = await API.bulkAddFields(gdbPath, { features: [fc], fields });
-          if (res.results && res.results.length > 0) {
-            const opRes = res.results[0];
-            if (opRes.success) results.succeeded++; else results.failed++;
-            results.results.push(opRes);
-          }
-        } catch (err) {
-          results.failed++;
-          results.results.push({ success: false, message: err.message || String(err), affected: [fc] });
-        }
-      }
+      const res = await API.bulkAddFieldsAsync(gdbPath, { dataset, feature_filter, fields });
       closeModal(backdrop);
-      showBulkResultsModal(results, 'Bulk Add Fields — Results');
+      showProgressModal(res.job_id, {
+        title: 'Bulk Add Fields',
+        onComplete: () => refreshCurrentFeature && refreshCurrentFeature(),
+      });
     } catch (e) {
       showError(e.message, 'Bulk Operation Failed');
       btn.disabled = false; btn.textContent = '⚡ Apply Bulk Add';
@@ -600,27 +584,15 @@ export function showBulkRenameFieldModal(gdbPath, gdbInfo, preselectedDataset) {
 
     const btn = backdrop.querySelector('#run-bulk-rename');
     btn.disabled = true;
-
-    const results = { total: targets.length, succeeded: 0, failed: 0, results: [] };
+    btn.textContent = 'Submitting task…';
 
     try {
-      for (let i = 0; i < targets.length; i++) {
-        btn.textContent = `Applying ${i + 1} / ${targets.length}…`;
-        const fc = targets[i];
-        try {
-          const res = await API.bulkRenameField(gdbPath, { features: [fc], old_name, new_name });
-          if (res.results && res.results.length > 0) {
-            const opRes = res.results[0];
-            if (opRes.success) results.succeeded++; else results.failed++;
-            results.results.push(opRes);
-          }
-        } catch (err) {
-          results.failed++;
-          results.results.push({ success: false, message: err.message || String(err), affected: [fc] });
-        }
-      }
+      const res = await API.bulkRenameFieldAsync(gdbPath, { dataset, feature_filter, old_name, new_name });
       closeModal(backdrop);
-      showBulkResultsModal(results, 'Bulk Rename Field — Results');
+      showProgressModal(res.job_id, {
+        title: 'Bulk Rename Field',
+        onComplete: () => refreshCurrentFeature && refreshCurrentFeature(),
+      });
     } catch (e) {
       showError(e.message, 'Bulk Rename Failed');
       btn.disabled = false; btn.textContent = '✏️ Apply Bulk Rename';
@@ -689,27 +661,15 @@ export function showBulkDeleteFieldModal(gdbPath, gdbInfo, preselectedDataset) {
 
     const btn = backdrop.querySelector('#run-bulk-delete');
     btn.disabled = true;
-
-    const results = { total: targets.length, succeeded: 0, failed: 0, results: [] };
+    btn.textContent = 'Submitting task…';
 
     try {
-      for (let i = 0; i < targets.length; i++) {
-        btn.textContent = `Deleting ${i + 1} / ${targets.length}…`;
-        const fc = targets[i];
-        try {
-          const res = await API.bulkDeleteField(gdbPath, { features: [fc], field_name });
-          if (res.results && res.results.length > 0) {
-            const opRes = res.results[0];
-            if (opRes.success) results.succeeded++; else results.failed++;
-            results.results.push(opRes);
-          }
-        } catch (err) {
-          results.failed++;
-          results.results.push({ success: false, message: err.message || String(err), affected: [fc] });
-        }
-      }
+      const res = await API.bulkDeleteFieldAsync(gdbPath, { dataset, feature_filter, field_name });
       closeModal(backdrop);
-      showBulkResultsModal(results, 'Bulk Delete Field — Results');
+      showProgressModal(res.job_id, {
+        title: 'Bulk Delete Field',
+        onComplete: () => refreshCurrentFeature && refreshCurrentFeature(),
+      });
     } catch (e) {
       showError(e.message, 'Bulk Delete Failed');
       btn.disabled = false; btn.textContent = '🗑 Apply Bulk Delete';
@@ -855,12 +815,13 @@ export function showCalculateFieldModal(layerName, fieldName, gdbPath, isBulk = 
     { value: 'area_sqm', label: 'Area (Square Meters)' },
     { value: 'area_ha', label: 'Area (Hectares)' },
     { value: 'area_acres', label: 'Area (Acres)' },
+    { value: 'area_sqft', label: 'Area (Square Feet)' },
     { value: 'area_sqkm', label: 'Area (Square Kilometers)' },
     { value: 'length_m', label: 'Perimeter/Length (Meters)' },
     { value: 'length_km', label: 'Perimeter/Length (Kilometers)' },
     { value: 'length_ft', label: 'Perimeter/Length (Feet)' },
-    { value: 'centroid_x', label: 'Centroid X (Map Units)' },
-    { value: 'centroid_y', label: 'Centroid Y (Map Units)' }
+    { value: 'centroid_x', label: 'Centroid Longitude / X (WGS 84 - EPSG:4326)' },
+    { value: 'centroid_y', label: 'Centroid Latitude / Y (WGS 84 - EPSG:4326)' }
   ].map(o => `<option value="${o.value}">${o.label}</option>`).join('');
 
   let targetControls = '';
@@ -972,40 +933,25 @@ export function showCalculateFieldModal(layerName, fieldName, gdbPath, isBulk = 
       const dataset = backdrop.querySelector('#calc-dataset').value || null;
       const feature_filter = backdrop.querySelector('#calc-filter').value.trim() || null;
 
-      const allFeatures = [];
-      if (dataset) {
-        const ds = gdbInfo.datasets.find(d => d.name === dataset);
-        if (ds) allFeatures.push(...ds.features);
-      } else {
-        allFeatures.push(...gdbInfo.standalone_features);
-        gdbInfo.datasets.forEach(d => allFeatures.push(...d.features));
-      }
-      const targets = feature_filter ? allFeatures.filter(f => f.toLowerCase().includes(feature_filter.toLowerCase())) : allFeatures;
-
-      if (targets.length === 0) {
-        showError('No feature classes match the selected filter.', 'Bulk Calculate Field');
+      btn.textContent = 'Submitting task…';
+      try {
+        const res = await API.bulkCalculateFieldAsync(gdbPath, {
+          dataset,
+          feature_filter,
+          field_name,
+          calc_type: calcType,
+          constant_value: constVal
+        });
+        closeModal(backdrop);
+        showProgressModal(res.job_id, {
+          title: `Bulk Calculate (${calcType})`,
+          onComplete: () => refreshCurrentFeature && refreshCurrentFeature(),
+        });
+      } catch (err) {
+        showError(err.message, 'Bulk Calculate Failed');
         btn.disabled = false;
-        return;
+        btn.textContent = '🧮 Apply Bulk Calculate';
       }
-
-      const results = { total: targets.length, succeeded: 0, failed: 0, results: [] };
-      for (let i = 0; i < targets.length; i++) {
-        btn.textContent = `Calculating ${i + 1} / ${targets.length}…`;
-        const fc = targets[i];
-        try {
-          const res = await API.calculateField(fc, field_name, gdbPath, {
-            calc_type: calcType,
-            constant_value: constVal
-          });
-          results.succeeded++;
-          results.results.push({ success: true, message: res.message, affected: [fc] });
-        } catch (err) {
-          results.failed++;
-          results.results.push({ success: false, message: err.message || String(err), affected: [fc] });
-        }
-      }
-      closeModal(backdrop);
-      showBulkResultsModal(results, 'Bulk Calculate Field — Results');
     }
   });
 }

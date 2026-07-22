@@ -72,6 +72,15 @@ class CalculateFieldRequest(BaseModel):
     constant_value: Optional[Any] = None
 
 
+class BulkCalculateFieldRequest(BaseModel):
+    dataset: Optional[str] = None
+    feature_filter: Optional[str] = None
+    features: Optional[List[str]] = None
+    field_name: str
+    calc_type: str
+    constant_value: Optional[Any] = None
+
+
 # ── Response Models ──────────────────────────────────────────────────────────
 
 class FieldInfo(BaseModel):

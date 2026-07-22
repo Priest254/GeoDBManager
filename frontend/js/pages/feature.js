@@ -346,51 +346,109 @@ async function renderDataTable(info, offset = 0, limit = 50) {
     const data = await API.getFeatureData(name, gdbPath, limit, offset);
     const { total_count, columns, rows } = data;
 
+    const totalPages = Math.ceil(total_count / limit) || 1;
+    const currentPage = Math.floor(offset / limit) + 1;
     const startRow = total_count === 0 ? 0 : offset + 1;
     const endRow = Math.min(offset + limit, total_count);
 
-    const tableHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
-        <div style="font-size:12px; color:var(--text-muted);">
-          Showing <strong>${startRow}</strong> to <strong>${endRow}</strong> of <strong>${total_count.toLocaleString()}</strong> features
+    const limitOptions = [25, 50, 100, 250, 500].map(opt =>
+      `<option value="${opt}" ${opt === limit ? 'selected' : ''}>${opt} rows / page</option>`
+    ).join('');
+
+    const paginationBarHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px; background:var(--bg-elevated); padding:8px 12px; border:1px solid var(--border); border-radius:var(--r-md);">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:12px; color:var(--text-muted);">
+            Showing <strong>${startRow.toLocaleString()}</strong> – <strong>${endRow.toLocaleString()}</strong> of <strong>${total_count.toLocaleString()}</strong> features
+          </span>
+          <select class="data-limit-select" class="form-control" style="width:auto; padding:2px 8px; font-size:11px; height:28px;">
+            ${limitOptions}
+          </select>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <button class="btn btn-secondary" id="data-prev-btn" ${offset <= 0 ? 'disabled' : ''} style="padding:4px 10px; font-size:11px;">◄ Prev</button>
-          <span style="font-size:12px; color:var(--text-muted);">Page ${Math.floor(offset / limit) + 1} of ${Math.ceil(total_count / limit) || 1}</span>
-          <button class="btn btn-secondary" id="data-next-btn" ${offset + limit >= total_count ? 'disabled' : ''} style="padding:4px 10px; font-size:11px;">Next ►</button>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="btn btn-secondary data-first-btn" ${currentPage <= 1 ? 'disabled' : ''} style="padding:3px 8px; font-size:11px;" title="First Page">⏮</button>
+          <button class="btn btn-secondary data-prev-btn" ${currentPage <= 1 ? 'disabled' : ''} style="padding:3px 8px; font-size:11px;" title="Previous Page">◄ Prev</button>
+          
+          <div style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text-muted);">
+            <span>Page</span>
+            <input type="number" class="data-page-input" value="${currentPage}" min="1" max="${totalPages}" style="width:52px; text-align:center; padding:2px 4px; font-size:12px; height:26px; border:1px solid var(--border); border-radius:4px; background:var(--bg-surface); color:var(--text-primary);" />
+            <span>of ${totalPages.toLocaleString()}</span>
+          </div>
+
+          <button class="btn btn-secondary data-next-btn" ${currentPage >= totalPages ? 'disabled' : ''} style="padding:3px 8px; font-size:11px;" title="Next Page">Next ►</button>
+          <button class="btn btn-secondary data-last-btn" ${currentPage >= totalPages ? 'disabled' : ''} style="padding:3px 8px; font-size:11px;" title="Last Page">⏭</button>
         </div>
       </div>
+    `;
+
+    const tableHTML = `
+      ${paginationBarHTML}
       <div class="fields-table-wrap">
         <table class="fields-table">
           <thead>
             <tr>
+              <th style="width:50px; text-align:center;">#</th>
               ${columns.map(c => `<th>${c}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
-            ${rows.length === 0 ? `<tr><td colspan="${columns.length}"><div class="empty-state" style="padding:20px"><p>No features found in this table.</p></div></td></tr>` :
-              rows.map(r => `
+            ${rows.length === 0 ? `<tr><td colspan="${columns.length + 1}"><div class="empty-state" style="padding:20px"><p>No features found in this table.</p></div></td></tr>` :
+              rows.map((r, idx) => `
                 <tr>
-                  ${columns.map(c => `<td class="mono" style="white-space:nowrap; max-width:260px; overflow:hidden; text-overflow:ellipsis;">${r[c] !== null && r[c] !== undefined ? String(r[c]) : '<span style="color:var(--text-muted)">NULL</span>'}</td>`).join('')}
+                  <td style="color:var(--text-muted); font-size:11px; text-align:center; font-family:var(--font-mono);">${offset + idx + 1}</td>
+                  ${columns.map(c => `<td class="mono" style="white-space:nowrap; max-width:280px; overflow:hidden; text-overflow:ellipsis;" title="${r[c] !== null && r[c] !== undefined ? String(r[c]).replace(/"/g, '&quot;') : 'NULL'}">${r[c] !== null && r[c] !== undefined ? String(r[c]) : '<span style="color:var(--text-muted)">NULL</span>'}</td>`).join('')}
                 </tr>
               `).join('')}
           </tbody>
         </table>
       </div>
+      <div style="margin-top:8px;">
+        ${paginationBarHTML}
+      </div>
     `;
 
     container.innerHTML = tableHTML;
 
-    document.getElementById('data-prev-btn')?.addEventListener('click', () => {
-      if (_dataOffset - _dataLimit >= 0) {
-        renderDataTable(info, _dataOffset - _dataLimit, _dataLimit);
-      }
+    // Attach listeners for top & bottom controls
+    const goToPage = (page) => {
+      let targetPage = parseInt(page, 10);
+      if (isNaN(targetPage)) return;
+      targetPage = Math.max(1, Math.min(targetPage, totalPages));
+      const newOffset = (targetPage - 1) * limit;
+      renderDataTable(info, newOffset, limit);
+    };
+
+    const changeLimit = (newLimit) => {
+      const parsedLimit = parseInt(newLimit, 10);
+      if (isNaN(parsedLimit) || parsedLimit <= 0) return;
+      renderDataTable(info, 0, parsedLimit);
+    };
+
+    container.querySelectorAll('.data-first-btn').forEach(btn => {
+      btn.addEventListener('click', () => goToPage(1));
     });
 
-    document.getElementById('data-next-btn')?.addEventListener('click', () => {
-      if (_dataOffset + _dataLimit < total_count) {
-        renderDataTable(info, _dataOffset + _dataLimit, _dataLimit);
-      }
+    container.querySelectorAll('.data-prev-btn').forEach(btn => {
+      btn.addEventListener('click', () => goToPage(currentPage - 1));
+    });
+
+    container.querySelectorAll('.data-next-btn').forEach(btn => {
+      btn.addEventListener('click', () => goToPage(currentPage + 1));
+    });
+
+    container.querySelectorAll('.data-last-btn').forEach(btn => {
+      btn.addEventListener('click', () => goToPage(totalPages));
+    });
+
+    container.querySelectorAll('.data-page-input').forEach(input => {
+      input.addEventListener('change', (e) => goToPage(e.target.value));
+      input.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') goToPage(e.target.value);
+      });
+    });
+
+    container.querySelectorAll('.data-limit-select').forEach(select => {
+      select.addEventListener('change', (e) => changeLimit(e.target.value));
     });
 
   } catch (e) {

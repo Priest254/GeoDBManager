@@ -2,15 +2,25 @@
 main.py — FastAPI application entry point.
 Serves the REST API and the static frontend SPA.
 """
-import os
 from pathlib import Path
+from osgeo import gdal, ogr
+
+# Suppress GDAL/OGR noise before any driver is loaded.
+# CPLQuietErrorHandler stops Python-level callbacks from printing.
+# The config options suppress C-level driver stderr messages:
+#   - OGR_GEOMETRY_ACCEPT_UNCLOSED_RING=YES  → accept silently (no warning).
+#   - CPL_LOG_ERRORS=OFF                      → skip error log file writes.
+gdal.SetConfigOption("OGR_GEOMETRY_ACCEPT_UNCLOSED_RING", "YES")
+gdal.SetConfigOption("CPL_LOG_ERRORS", "OFF")
+gdal.PushErrorHandler("CPLQuietErrorHandler")
+ogr.UseExceptions()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.routers import geodatabase, features, fields, bulk, datasets, export
+from backend.routers import geodatabase, features, fields, bulk, datasets, export, jobs
 
 # ── App factory ──────────────────────────────────────────────────────────────
 
@@ -29,12 +39,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def add_no_cache_header(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static") or path.endswith(".js") or path.endswith(".css"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # ── API Routers ───────────────────────────────────────────────────────────────
 app.include_router(geodatabase.router)
 app.include_router(features.router)
 app.include_router(datasets.router)
 app.include_router(fields.router)
 app.include_router(bulk.router)
+app.include_router(jobs.router)
 app.include_router(export.router)
 
 # ── Static Frontend ───────────────────────────────────────────────────────────
